@@ -16,7 +16,8 @@ const (
 )
 
 const (
-	NONE string = "none"
+	NONE         string = "none"
+	DEFAULT_NODE string = "<ENV>"
 )
 
 var waitLock sync.WaitGroup
@@ -29,18 +30,25 @@ var MyNode Node //sent whenever a socket is established
 var register chan *NodeConnection
 var unregister chan string
 
+type NotifyNode struct {
+	Node *Node
+}
+
 func init() {
 	hn, err := os.Hostname()
 	if err != nil {
 		log.Fatal(err)
 	}
+	gob.Register(Node{})
+	gob.Register(DisGommand{})
+
 	MyHost = hn
 	MyNode.Host = MyHost
 	MyNode.Version = DISGO_VERSION
 	flag.StringVar(&joinTo, "j", NONE, "Join a specific node")
 	flag.StringVar(&bindAddr, "b", "", "Address to bind connections")
 	flag.StringVar(&MyNode.Env, "env", "dev", "Operating environment")
-	flag.StringVar(&MyNode.Name, "n", MyHost, "Sets the node name")
+	flag.StringVar(&MyNode.Name, "n", DEFAULT_NODE, "Sets the node name")
 	flag.IntVar(&tcpPort, "t", 8765, "TCP port to listen on")
 	flag.IntVar(&udpPort, "u", 8765, "UDP port to listen on")
 
@@ -64,9 +72,17 @@ func main() {
 	waitLock.Wait()
 }
 
-const (
-	addNode = iota
-)
+type DisGommand struct {
+	Action string
+	Key    string
+	Value  string
+}
+
+type DisGommandable interface {
+	ToDisGommands(action string) DisGommands
+}
+
+type DisGommands []DisGommand
 
 func registryLoop() {
 	reg := make(map[string]*NodeConnection)
@@ -88,10 +104,21 @@ func registryLoop() {
 				nc.Close()
 			} else {
 				log.Printf("Registered: %s", nc)
-				nodeSync := ControlMsg{Nodes: nodeList(reg), Id: 12345, Action: "sync"}
-				nc.out.Encode(&nodeSync)
+				f := nc.node.ToDisGommands("put")
+				// f := DisGommands{
+				// 	DisGommand{Action: "put", Key: "/node/" + nc.node.Address, Value: "foofie"},
+				// }
+				// nodeFound := &DisGommand{Action: "put", Key: "/node/" + nc.node.Address, Value: nc.node.Address}
+				for _, peer := range reg {
+					err := peer.Send(f)
+					if err != nil {
+						log.Println("Error sending:", err)
+					} else {
+						log.Printf("sent %+v -- %+v", peer.node, f)
+					}
+				}
+				// nc.out.Encode(&nodeFound)
 				reg[nc.node.Name] = nc
-				log.Printf("sent %+v", nodeSync)
 				go nodeLoop(nc)
 			}
 		}
@@ -99,19 +126,20 @@ func registryLoop() {
 }
 
 func nodeList(reg map[string]*NodeConnection) []*Node {
-	ret := make([]*Node)
+	fmt.Println(len(reg), reg)
+	ret := make([]*Node, 0, len(reg))
 	for _, n := range reg {
 		ret = append(ret, n.node)
 	}
-	log.Printf("Node List: %s", ret)
 	return ret
 }
 
 func nodeLoop(node *NodeConnection) {
 	for {
-		var msg ControlMsg
+		var msg DisGommands
 		log.Println("Waiting for msg")
 		err := node.in.Decode(&msg)
+		log.Println("GOT stuff")
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("Disconnected from: %+v", node)
@@ -122,7 +150,7 @@ func nodeLoop(node *NodeConnection) {
 			unregister <- node.node.Name
 			return
 		} else {
-			log.Printf("Got msg: %+v", msg)
+			log.Printf("Got msg: %#v", msg)
 		}
 	}
 }
