@@ -4,6 +4,8 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	_ "github.com/peak6/disgo/dbstuff"
+	"github.com/peak6/disgo/disgo_vfs"
 	"io"
 	"log"
 	"net"
@@ -59,8 +61,12 @@ func init() {
 
 func main() {
 	flag.Parse()
-	initListener()
+	disgo_vfs.VFSTest()
+}
 
+func netstuff() {
+	initListener()
+	// dbstuff.Dodbstuff()
 	if joinTo != NONE {
 		err := attemptJoin(joinTo)
 		if err != nil {
