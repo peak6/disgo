@@ -7,11 +7,30 @@ import (
 )
 
 const (
-	Added = iota
+	Added = 1 << iota
 	Removed
 	Modified
 )
 
+/*type cmd struct {
+	reply chan string
+}
+type mkdir struct {
+	cmd
+	name string
+}
+
+func inloop(cmd chan interface{}) {
+	for {
+		select {
+		case c <- cmd:
+			select c.type(){
+
+			}
+		}
+	}
+}
+*/
 type ChangeListener chan Change
 
 type Change struct {

@@ -5,7 +5,7 @@ import (
 	"flag"
 	"fmt"
 	_ "github.com/peak6/disgo/dbstuff"
-	"github.com/peak6/disgo/disgo_vfs"
+	_ "github.com/peak6/disgo/disgo_vfs"
 	"io"
 	"log"
 	"net"
@@ -61,7 +61,8 @@ func init() {
 
 func main() {
 	flag.Parse()
-	disgo_vfs.VFSTest()
+	// disgo_vfs.VFSTest()
+	testMap()
 }
 
 func netstuff() {
