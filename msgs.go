@@ -5,14 +5,6 @@ import (
 	"net"
 )
 
-type Node struct {
-	Name    string
-	Env     string
-	Version int
-	Address string
-	Host    string
-	Pid     int
-}
 
 func (n *Node) ToDisGommands(action string) DisGommands {
 	return DisGommands{

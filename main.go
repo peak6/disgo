@@ -9,6 +9,8 @@ import (
 	"net"
 	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 )
 
 const (
@@ -34,6 +36,16 @@ type NotifyNode struct {
 	Node *Node
 }
 
+type Node struct {
+	Name      string
+	Env       string
+	Version   int
+	Address   string
+	Host      string
+	Pid       int
+	BootNanos int64
+}
+
 func init() {
 	hn, err := os.Hostname()
 	if err != nil {
@@ -43,6 +55,7 @@ func init() {
 	gob.Register(DisGommand{})
 
 	MyHost = hn
+	MyNode.BootNanos = time.Now().UnixNano()
 	MyNode.Host = MyHost
 	MyNode.Version = DISGO_VERSION
 	flag.StringVar(&joinTo, "j", NONE, "Join a specific node")
@@ -110,10 +123,6 @@ func registryLoop() {
 			} else {
 				log.Printf("Registered: %s", nc.node.Name)
 				f := nc.node.ToDisGommands("put")
-				// f := DisGommands{
-				// 	DisGommand{Action: "put", Key: "/node/" + nc.node.Address, Value: "foofie"},
-				// }
-				// nodeFound := &DisGommand{Action: "put", Key: "/node/" + nc.node.Address, Value: nc.node.Address}
 				for _, peer := range reg {
 					err := peer.Send(f)
 					if err != nil {
@@ -177,7 +186,11 @@ func initConnection(conn net.Conn) error {
 		return err
 	}
 	if MyNode.Name == theirHello.Name {
-		log.Fatalf("Duplicate name: %s detected, other node is: %#v", MyNode.Name, theirHello)
+		if MyNode.BootNanos < theirHello.BootNanos {
+			log.Printf("Duplicate name: %s detected, other should die, their hello is: %#v", MyNode.Name, theirHello)
+		} else {
+			log.Fatalf("Exiting due to duplicate name: %s detected, other node is: %#v", MyNode.Name, theirHello)
+		}
 	}
 	log.Printf("Received: %#v\n", theirHello)
 	register <- &NodeConnection{node: &theirHello, in: dec, out: enc, conn: conn}
@@ -233,4 +246,10 @@ func ensureNotError(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+type AtomicInt int64
+
+func (a *AtomicInt) inc() int64 {
+	return atomic.AddInt64((*int64)(a), 1)
 }

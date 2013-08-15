@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -129,12 +128,6 @@ func watcher(ch DMapWatcher) {
 		fmt.Printf("watcher:%+v\n", msg)
 	}
 	fmt.Println("Exiting watcher")
-}
-
-type AtomicInt int64
-
-func (a *AtomicInt) inc() int64 {
-	return atomic.AddInt64((*int64)(a), 1)
 }
 
 func testMap() {
