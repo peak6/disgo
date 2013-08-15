@@ -4,8 +4,6 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
-	_ "github.com/peak6/disgo/dbstuff"
-	_ "github.com/peak6/disgo/disgo_vfs"
 	"io"
 	"log"
 	"net"
@@ -61,8 +59,8 @@ func init() {
 
 func main() {
 	flag.Parse()
-	// disgo_vfs.VFSTest()
 	testMap()
+	netstuff()
 }
 
 func netstuff() {
@@ -98,7 +96,7 @@ func registryLoop() {
 		case name := <-unregister:
 			nc, ok := reg[name]
 			if ok {
-				log.Println("Unregistered:", nc.node)
+				log.Println("Unregistered:", nc.node.Name)
 				delete(reg, name)
 			} else {
 				log.Println("Unknown node:", name)
@@ -110,7 +108,7 @@ func registryLoop() {
 				log.Printf("Can't register: %s, due to conflict with: %s", nc.node, cur.node)
 				nc.Close()
 			} else {
-				log.Printf("Registered: %s", nc)
+				log.Printf("Registered: %s", nc.node.Name)
 				f := nc.node.ToDisGommands("put")
 				// f := DisGommands{
 				// 	DisGommand{Action: "put", Key: "/node/" + nc.node.Address, Value: "foofie"},
