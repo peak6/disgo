@@ -132,6 +132,7 @@ type UnregCmd struct {
 }
 type PingCmd struct {
 }
+
 type Cmd struct {
 	Ping       *bool     `json:"ping"`
 	Register   *RegCmd   `json:"register"`
@@ -143,13 +144,6 @@ type Rsp struct {
 	Register *bool       `json:"register,omitempty"`
 	List     *[]regEntry `json:"list,omitempty"`
 }
-
-// type Command struct {
-// 	Cmd  string `json:"cmd"`
-// 	Name string `json:"name"`
-// 	Port int    `json:"port"`
-// 	Pid  int    `json:"pid"`
-// }
 
 func doList(ac *appConn, filter string) {
 	regLock.RLock()
