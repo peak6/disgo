@@ -10,7 +10,6 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 const (
@@ -28,66 +27,13 @@ var joinTo string
 var bindAddr string
 var udpPort int
 var tcpPort int
-var MyNode Node //sent whenever a socket is established
 var register chan *NodeConnection
 var unregister chan string
-
-type NotifyNode struct {
-	Node *Node
-}
-
-type Node struct {
-	Name      string
-	Env       string
-	Version   int
-	Address   string
-	Host      string
-	Pid       int
-	BootNanos int64
-}
-
-func init() {
-	hn, err := os.Hostname()
-	if err != nil {
-		log.Fatal(err)
-	}
-	gob.Register(Node{})
-	gob.Register(DisGommand{})
-
-	MyHost = hn
-	MyNode.BootNanos = time.Now().UnixNano()
-	MyNode.Host = MyHost
-	MyNode.Version = DISGO_VERSION
-	flag.StringVar(&joinTo, "j", NONE, "Join a specific node")
-	flag.StringVar(&bindAddr, "b", "", "Address to bind connections")
-	flag.StringVar(&MyNode.Env, "env", "dev", "Operating environment")
-	flag.StringVar(&MyNode.Name, "n", DEFAULT_NODE, "Sets the node name")
-	flag.IntVar(&tcpPort, "t", 8765, "TCP port to listen on")
-	flag.IntVar(&udpPort, "u", 8765, "UDP port to listen on")
-
-	register = make(chan *NodeConnection)
-	unregister = make(chan string)
-	go registryLoop()
-}
 
 func main() {
 	flag.Parse()
 	testMap()
-	netstuff()
-}
-
-func netstuff() {
-	initListener()
-	// dbstuff.Dodbstuff()
-	if joinTo != NONE {
-		err := attemptJoin(joinTo)
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-	waitLock.Add(1)
-	log.Println("Waiting for exit")
-	waitLock.Wait()
+	startNode()
 }
 
 type DisGommand struct {
@@ -174,7 +120,7 @@ func initConnection(conn net.Conn) error {
 	enc := gob.NewEncoder(conn)
 	dec := gob.NewDecoder(conn)
 
-	err := enc.Encode(&MyNode)
+	err := enc.Encode(&nodeConfig.MyNode)
 	var theirHello Node
 
 	if err == nil {
@@ -185,11 +131,11 @@ func initConnection(conn net.Conn) error {
 		log.Println("Error during handshake with", conn.RemoteAddr(), err)
 		return err
 	}
-	if MyNode.Name == theirHello.Name {
-		if MyNode.BootNanos < theirHello.BootNanos {
-			log.Printf("Duplicate name: %s detected, other should die, their hello is: %#v", MyNode.Name, theirHello)
+	if nodeConfig.MyNode.Name == theirHello.Name {
+		if nodeConfig.MyNode.BootNanos < theirHello.BootNanos {
+			log.Printf("Duplicate name: %s detected, other should die, their hello is: %#v", nodeConfig.MyNode.Name, theirHello)
 		} else {
-			log.Fatalf("Exiting due to duplicate name: %s detected, other node is: %#v", MyNode.Name, theirHello)
+			log.Fatalf("Exiting due to duplicate name: %s detected, other node is: %#v", nodeConfig.MyNode.Name, theirHello)
 		}
 	}
 	log.Printf("Received: %#v\n", theirHello)
@@ -198,7 +144,7 @@ func initConnection(conn net.Conn) error {
 }
 
 func initListener() {
-	MyNode.Pid = os.Getpid()
+	nodeConfig.MyNode.Pid = os.Getpid()
 	laddr := fmt.Sprintf("%s:%d", bindAddr, tcpPort)
 	log.Println("Setting up:", laddr)
 	listener, err := net.Listen("tcp", laddr)
@@ -209,11 +155,11 @@ func initListener() {
 	if tcpAddr.IP.IsUnspecified() {
 		host, err := os.Hostname()
 		ensureNotError(err)
-		MyNode.Address = fmt.Sprintf("%s:%d", host, tcpAddr.Port)
+		nodeConfig.MyNode.Address = fmt.Sprintf("%s:%d", host, tcpAddr.Port)
 	} else {
-		MyNode.Address = tcpAddr.String()
+		nodeConfig.MyNode.Address = tcpAddr.String()
 	}
-	log.Printf("My hello is: %#v", MyNode)
+	log.Printf("My hello is: %#v", nodeConfig.MyNode)
 	go acceptLoop(listener)
 }
 
