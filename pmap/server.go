@@ -1,15 +1,12 @@
 package pmap
 
 import (
-	"encoding/json"
-	"fmt"
-	"github.com/golang/glog"
 	"io"
+	"log"
 	"net"
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 )
 
 var TRUE = true
@@ -28,70 +25,27 @@ func (s *server) ListenAndServe() {
 	Server.wait.Add(1)
 	defer Server.wait.Done()
 	Server.registry = make(map[string]Registration)
-	glog.Infof("Listening for pmap clients on '%s'", pmapAddr)
+
+	log.Printf("Listening for pmap clients on '%s'", pmapAddr)
 	lsnr, err := net.Listen("tcp", pmapAddr)
 	if err != nil {
-		glog.Fatal(err)
+		log.Fatal(err)
 	}
-	glog.Flush()
 	for {
 		sock, err := lsnr.Accept()
 		if err != nil {
-			glog.Fatalf("Receive error attempting to accept a connection: %s", err)
+			log.Fatalf("Receive error attempting to accept a connection: %s", err)
 		}
 		go connectionLoop(sock)
 	}
 }
 
-type pmapConn struct {
-	conn       net.Conn
-	in         *json.Decoder
-	out        *json.Encoder
-	sockName   string
-	startTime  time.Time
-	exitReason string
-}
-
-func NewAppConn(conn net.Conn) *pmapConn {
-	ret := pmapConn{}
-	ret.conn = conn
-	ret.in = json.NewDecoder(conn)
-	ret.out = json.NewEncoder(conn)
-	ret.sockName = conn.RemoteAddr().String()
-	ret.startTime = time.Now()
-	ret.exitReason = "client disconnected"
-	return &ret
-}
-
-func (ac *pmapConn) shutdown() {
-	Server.regLock.Lock()
-	defer Server.regLock.Unlock()
-	for n, r := range Server.registry {
-		if r.GetRef() == ac {
-			delete(Server.registry, n) // Supposadly, this is safe, delete while iterating.  You shouldn't miss any elements
-			ac.log("Unregistered", n)
-		}
-	}
-	ac.conn.Close()
-	ac.log("Disconnected after:", time.Now().Sub(ac.startTime), "reason:", ac.exitReason)
-}
-
-func (ac *pmapConn) send(msg interface{}) {
-	ac.out.Encode(msg)
-}
-
-func (ac *pmapConn) log(args ...interface{}) {
-	glog.Infoln(append([]interface{}{"[" + ac.sockName + "]"}, args...)...)
-}
-func (ac *pmapConn) logf(format string, args ...interface{}) {
-	glog.Infoln("[%s] %s", ac.sockName, fmt.Sprintf(format, args...))
-}
-
 func connectionLoop(conn net.Conn) {
-	ac := NewAppConn(conn)
+	ac := newPMapConn(conn)
 	defer ac.shutdown()
 	// ac.log("Connected")
-	for {
+	run := true
+	for run {
 		var req Request
 		var resp Response
 		err := ac.in.Decode(&req)
@@ -100,6 +54,7 @@ func connectionLoop(conn net.Conn) {
 				break
 			}
 			resp.SetError(err)
+			run = false
 		} else if req.Ping != nil {
 			resp.Pong = &TRUE
 		} else if req.List != nil {
@@ -112,34 +67,27 @@ func connectionLoop(conn net.Conn) {
 			resp.SetError("Must request List, Register, Unregister or Ping")
 		}
 		ac.send(resp)
-		if resp.Error != nil {
-			ac.exitReason = *resp.Error
-			break
-		}
 	}
 }
 
 func handleRegister(ac *pmapConn, reg Registration, resp *Response) {
+	err := reg.Validate()
+	if err != nil {
+		resp.SetError(err.Error())
+		return
+	}
 	Server.regLock.Lock()
 	defer Server.regLock.Unlock()
-	if reg.Name == "" {
-		resp.SetError("Name cannot be empty")
-	} else if reg.Port == 0 {
-		resp.SetError("port must be > 0")
+
+	reg.Name = strings.ToLower(reg.Name)
+	reg.SetRef(ac)
+	orig, ok := Server.registry[reg.Name]
+	if ok {
+		resp.SetError("Already registered:", orig)
 	} else {
-		reg.Name = strings.ToLower(reg.Name)
-		reg.SetRef(ac)
-		if reg.Address == "" {
-			reg.Address = HostName
-		}
-		orig, ok := Server.registry[reg.Name]
-		if ok {
-			resp.SetError("Already registered:", orig)
-		} else {
-			Server.registry[reg.Name] = reg
-			resp.Register = &TRUE
-			ac.log("Registered", reg)
-		}
+		Server.registry[reg.Name] = reg
+		resp.Register = &TRUE
+		ac.log("Registered", reg)
 	}
 }
 
