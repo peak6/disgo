@@ -8,7 +8,8 @@ import (
 )
 
 func NewClient() (*client, error) {
-	conn, err := net.Dial("tcp", pmapAddr)
+	// conn, err := net.Dial("tcp", pmapAddr)
+	conn, err := net.Dial("unix", "/tmp/dlb")
 	if err != nil {
 		return nil, err
 	} else {
