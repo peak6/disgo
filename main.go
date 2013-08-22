@@ -1,16 +1,12 @@
 package main
 
 import (
-	"encoding/gob"
 	"flag"
-	"fmt"
+	"github.com/peak6/disgo/cluster"
 	"github.com/peak6/disgo/om"
-	"io"
-	"log"
-	"net"
+	log_pkg "log"
 	"os"
-	"sync"
-	"sync/atomic"
+	// "sync"
 )
 
 const (
@@ -22,7 +18,7 @@ const (
 	DEFAULT_NODE string = "<ENV>"
 )
 
-var waitLock sync.WaitGroup
+/*var waitLock sync.WaitGroup
 var MyHost string
 var joinTo string
 var bindAddr string
@@ -30,25 +26,27 @@ var udpPort int
 var tcpPort int
 var register chan *NodeConnection
 var unregister chan string
-
-var maps map[string]om.OwnerMap
+*/
+var maps map[string]*om.OwnerMap
+var log = log_pkg.New(os.Stderr, "[disgo] ", log_pkg.LstdFlags|log_pkg.Lshortfile|log_pkg.Lmicroseconds)
 
 func init() {
-	maps = make(map[string]om.OwnerMap)
+	maps = make(map[string]*om.OwnerMap)
 }
 
 func main() {
+	log_pkg.SetFlags(log_pkg.LstdFlags | log_pkg.Lshortfile | log_pkg.Lmicroseconds)
 	flag.Parse()
 	// runtime.GOMAXPROCS(runtime.NumCPU())
-	var mapCount = 5
-	tgt := om.New()
+	// var mapCount = 5
+	// tgt := om.New()
 
-	maps := []*om.OwnerMap{}
-	for i := 0; i < mapCount; i++ {
-		maps = append(maps, om.New())
-		maps[i].ReplicateTo(tgt)
-		maps[i].Set(maps[i], "akey", "aval")
-	}
+	// maps := []*om.OwnerMap{}
+	// for i := 0; i < mapCount; i++ {
+	// 	maps = append(maps, om.New())
+	// 	maps[i].ReplicateTo(tgt)
+	// 	maps[i].Set(maps[i], "akey", "aval")
+	// }
 	/*	m := om.New()
 		log.Println(m)
 		m.Set("me", "key", "mval")
@@ -66,14 +64,23 @@ func main() {
 		m.DeleteOwner("you")
 	*/
 	// time.Sleep(time.Second)
-	log.Println(tgt)
-	startNode()
+	// log.Println(tgt)
+	go initWeb()
+	cluster.RegisterMsg(Ping{})
+	cluster.RegisterMsg(Pong{})
+	log.Fatal(cluster.Init())
 	/*	log.Println("m", m)
 		log.Println("repl1", repl1)
 		log.Println("repl2", repl2)
 	*/
 }
 
+type Ping struct {
+}
+type Pong struct {
+}
+
+/*
 func main2() {
 	flag.Parse()
 	testMap()
@@ -242,3 +249,4 @@ type AtomicInt int64
 func (a *AtomicInt) inc() int64 {
 	return atomic.AddInt64((*int64)(a), 1)
 }
+*/
