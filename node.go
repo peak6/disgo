@@ -10,7 +10,7 @@ import (
 
 var nodeConfig struct {
 	MyNode     Node
-	ListenPort int
+	ListenAddr string
 }
 
 type NotifyNode struct {
@@ -44,7 +44,7 @@ func init() {
 	flag.StringVar(&bindAddr, "b", "", "Address to bind connections")
 	flag.StringVar(&MyNode.Env, "env", "dev", "Operating environment")
 	flag.StringVar(&MyNode.Name, "n", DEFAULT_NODE, "Sets the node name")
-	flag.IntVar(&nodeConfig.ListenPort, "l", 8765, "TCP port to listen on")
+	flag.StringVar(&nodeConfig.ListenAddr, "l", ":8765", "TCP port to listen on")
 
 	register = make(chan *NodeConnection)
 	unregister = make(chan string)

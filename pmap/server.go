@@ -4,6 +4,8 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
+	"os/signal"
 	"regexp"
 	"strings"
 	"sync"
@@ -24,7 +26,6 @@ type server struct {
 func (s *server) ListenAndServe() {
 	defer Server.wait.Done()
 	Server.registry = make(map[string]Registration)
-
 	log.Printf("Listening for pmap clients on '%s'", pmapAddr)
 	lsnr, err := net.Listen("tcp", pmapAddr)
 	if err != nil {
@@ -33,9 +34,20 @@ func (s *server) ListenAndServe() {
 	Server.wait.Add(1)
 	go acceptLoop(lsnr)
 	lsnr, err = net.Listen("unix", "/tmp/dlb")
+
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer os.Remove("/tmp/dlb")
+	schan := make(chan os.Signal)
+	signal.Notify(schan, os.Kill, os.Interrupt)
+	go func() {
+		s := <-schan
+		log.Println("Deleting file due to:", s)
+		os.Remove("/tmp/dlb")
+		log.Println("deleted")
+		signal.Stop(schan)
+	}()
 	Server.wait.Add(1)
 	go acceptLoop(lsnr)
 

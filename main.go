@@ -4,6 +4,7 @@ import (
 	"encoding/gob"
 	"flag"
 	"fmt"
+	"github.com/peak6/disgo/om"
 	"io"
 	"log"
 	"net"
@@ -30,7 +31,50 @@ var tcpPort int
 var register chan *NodeConnection
 var unregister chan string
 
+var maps map[string]om.OwnerMap
+
+func init() {
+	maps = make(map[string]om.OwnerMap)
+}
+
 func main() {
+	flag.Parse()
+	// runtime.GOMAXPROCS(runtime.NumCPU())
+	var mapCount = 5
+	tgt := om.New()
+
+	maps := []*om.OwnerMap{}
+	for i := 0; i < mapCount; i++ {
+		maps = append(maps, om.New())
+		maps[i].ReplicateTo(tgt)
+		maps[i].Set(maps[i], "akey", "aval")
+	}
+	/*	m := om.New()
+		log.Println(m)
+		m.Set("me", "key", "mval")
+		m.Set("you", "key", "yval")
+		m.Set("me", "2key2", "val")
+		log.Println("m", m)
+
+		repl1 := om.New()
+		m.ReplicateTo(repl1)
+		repl2 := om.New()
+		m.ReplicateTo(repl2)
+		log.Println("m", m)
+		log.Println("repl1", repl1)
+		m.Set("them", "bar", "baz")
+		m.DeleteOwner("you")
+	*/
+	// time.Sleep(time.Second)
+	log.Println(tgt)
+	startNode()
+	/*	log.Println("m", m)
+		log.Println("repl1", repl1)
+		log.Println("repl2", repl2)
+	*/
+}
+
+func main2() {
 	flag.Parse()
 	testMap()
 	startNode()
@@ -145,9 +189,8 @@ func initConnection(conn net.Conn) error {
 
 func initListener() {
 	nodeConfig.MyNode.Pid = os.Getpid()
-	laddr := fmt.Sprintf("%s:%d", bindAddr, tcpPort)
-	log.Println("Setting up:", laddr)
-	listener, err := net.Listen("tcp", laddr)
+	log.Println("Setting up:", nodeConfig.ListenAddr)
+	listener, err := net.Listen("tcp", nodeConfig.ListenAddr)
 	if err != nil {
 		log.Fatal(err)
 	}
