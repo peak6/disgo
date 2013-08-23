@@ -9,9 +9,11 @@ import (
 	log_pkg "log"
 	"net"
 	"os"
+	"sync"
 	"time"
 )
 
+var clusterWait sync.WaitGroup
 var mcastAddr = "239.20.0.128:4777"
 var listenAddr = ":4760"
 var MyNode Node
@@ -39,45 +41,6 @@ type Node struct {
 	BootNanos   int64
 }
 
-func mcloop() {
-	i, err := net.InterfaceByName("lo")
-	gaddr, err := net.ResolveUDPAddr("udp", mcastAddr)
-	if err != nil {
-		log.Println("Multicast discover disabled:", err)
-		return
-	}
-	conn, err := net.ListenMulticastUDP("udp", i, gaddr)
-	if err != nil {
-		log.Println("Multicast discover disabled:", err)
-		return
-	}
-	go func() {
-		data, err := json.Marshal(MyNode)
-		if err != nil {
-			log.Panic("Fail", err)
-		}
-		for {
-			time.Sleep(time.Second)
-			conn.WriteToUDP(data, gaddr)
-			log.Println("sent mcast")
-		}
-	}()
-	go func() {
-		data := make([]byte, 2048, 2048)
-		for {
-			fmt.Println("Reading mcast")
-			sz, addr, err := conn.ReadFromUDP(data)
-			fmt.Println("Read:", sz)
-			if err != nil {
-				log.Println("hmmm", err)
-			}
-			n := Node{}
-			json.Unmarshal(data[:sz], &n)
-			log.Println("Got mcast: ", n, addr)
-
-		}
-	}()
-}
 func Init() error {
 	if initError != nil {
 		return initError
@@ -96,8 +59,10 @@ func Init() error {
 		}
 		newHandler(conn)
 	}
-	mcloop()
+	// mcloop()
 	acceptLoop(lsnr)
+	clusterWait.Wait()
+	log.Println("Cluster shutdown")
 	return nil
 }
 
@@ -157,13 +122,21 @@ func nodeList() []Node {
 	return nlist
 }
 
-func newHandler(conn net.Conn) error {
+func newHandler(conn net.Conn, initiator bool) error {
 	log.Println("Setting up", conn.RemoteAddr(), conn.LocalAddr())
 	nc := newNodeConn(conn)
-	nc.send(MyNode)
+	theirNode := Node{}
+
+	if !initiator {
+		nc.send(MyNode)
+	} else {
+		err := nc.receive(&theirNode)
+		if err != nil {
+			return err
+		}
+	}
 	nc.send(nodeList())
 
-	theirNode := Node{}
 	err := nc.receive(&theirNode)
 	if err != nil {
 		return nc.shutdown(err)
@@ -182,8 +155,8 @@ func newHandler(conn net.Conn) error {
 	log.Println("Their node list: ", theirList)
 	nc.node = theirNode
 	nodes[theirNode] = &nc
-	go nc.recLoop()
-	go nc.sndLoop()
+	clusterWait.Add(1)
+	nc.startCmdLoop()
 	for _, n := range theirList {
 		join(n)
 	}
@@ -229,27 +202,73 @@ func (nc *nodeConn) shutdown(err error) error {
 	return err
 }
 
-func (nc *nodeConn) sndLoop() {
-	defer nc.shutdown(errors.New("Unknown reason"))
-	for msg := range nc.cmdChan {
-		log.Println("Sending:", msg)
-		err := nc.send(msg)
-		if err != nil {
-			log.Panic(err)
+func (nc *nodeConn) startCmdLoop() {
+	clusterWait.Add(2)
+	go func() {
+		defer clusterWait.Done()
+		defer nc.shutdown(errors.New("Unknown reason"))
+		for msg := range nc.cmdChan {
+			log.Println("Sending:", msg)
+			err := nc.send(msg)
+			if err != nil {
+				log.Panic(err)
+			}
 		}
-	}
+	}()
+	go func() {
+		defer clusterWait.Done()
+		defer nc.shutdown(errors.New("Unkown reason"))
+		for {
+			var msg command
+			err := nc.receive(&msg)
+			if err != nil {
+				nc.shutdown(err)
+				return
+			}
+			log.Println("Got:", msg)
+		}
+	}()
 }
 
-func (nc *nodeConn) recLoop() {
-	defer nc.shutdown(errors.New("Unkown reason"))
-	for {
-		var msg command
-		err := nc.receive(&msg)
-		if err != nil {
-			nc.shutdown(err)
-			return
-		}
-		log.Println("Got:", msg)
+func mcloop() {
+	i, err := net.InterfaceByName("lo")
+	gaddr, err := net.ResolveUDPAddr("udp", mcastAddr)
+	if err != nil {
+		log.Println("Multicast discover disabled:", err)
+		return
 	}
+	conn, err := net.ListenMulticastUDP("udp", i, gaddr)
+	if err != nil {
+		log.Println("Multicast discover disabled:", err)
+		return
+	}
+	clusterWait.Add(2)
+	go func() {
+		defer clusterWait.Done()
+		data, err := json.Marshal(MyNode)
+		if err != nil {
+			log.Panic("Fail", err)
+		}
+		for {
+			time.Sleep(time.Second)
+			conn.WriteToUDP(data, gaddr)
+			log.Println("sent mcast")
+		}
+	}()
+	go func() {
+		defer clusterWait.Done()
+		data := make([]byte, 2048, 2048)
+		for {
+			fmt.Println("Reading mcast")
+			sz, addr, err := conn.ReadFromUDP(data)
+			fmt.Println("Read:", sz)
+			if err != nil {
+				log.Println("hmmm", err)
+			}
+			n := Node{}
+			json.Unmarshal(data[:sz], &n)
+			log.Println("Got mcast: ", n, addr)
 
+		}
+	}()
 }
