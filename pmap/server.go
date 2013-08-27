@@ -4,8 +4,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"os"
-	"os/signal"
 	"regexp"
 	"strings"
 	"sync"
@@ -33,32 +31,7 @@ func (s *server) ListenAndServe() {
 	}
 	Server.wait.Add(1)
 	go acceptLoop(lsnr)
-	lsnr, err = net.Listen("unix", "/tmp/dlb")
-
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer os.Remove("/tmp/dlb")
-	schan := make(chan os.Signal)
-	signal.Notify(schan, os.Kill, os.Interrupt)
-	go func() {
-		s := <-schan
-		log.Println("Deleting file due to:", s)
-		os.Remove("/tmp/dlb")
-		log.Println("deleted")
-		signal.Stop(schan)
-	}()
-	Server.wait.Add(1)
-	go acceptLoop(lsnr)
-
 	Server.wait.Wait()
-	// for {
-	// 	sock, err := lsnr.Accept()
-	// 	if err != nil {
-	// 		log.Fatalf("Receive error attempting to accept a connection: %s", err)
-	// 	}
-	// 	go connectionLoop(sock)
-	// }
 }
 
 func acceptLoop(listener net.Listener) {

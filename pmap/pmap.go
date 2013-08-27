@@ -28,7 +28,7 @@ type Registration struct {
 	Name string      `json:"name"`
 	Addr string      `json:"addr"`
 	Pid  int         `json:"pid"`
-	ref  interface{} // Used to attach a custom value to this registration, does NOT encoded
+	ref  interface{} // Used to attach a custom value to this registration, does NOT get transmitted to remote nodes
 }
 
 func (r Registration) String() string {

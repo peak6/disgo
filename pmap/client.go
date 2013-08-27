@@ -8,16 +8,18 @@ import (
 )
 
 func NewClient() (*client, error) {
-	// conn, err := net.Dial("tcp", pmapAddr)
-	conn, err := net.Dial("unix", "/tmp/dlb")
+	conn, err := net.Dial("tcp", pmapAddr)
 	if err != nil {
 		return nil, err
-	} else {
-		pmc := newPMapConn(conn)
-		cl := client{pmc: pmc, respChan: make(chan Response)}
-		go cl.clientLoop()
-		return &cl, nil
 	}
+	pmc := newPMapConn(conn)
+	cl := client{pmc: pmc, respChan: make(chan Response)}
+	go cl.clientLoop()
+	return &cl, nil
+}
+
+func (cl *client) Close() {
+	cl.pmc.shutdown()
 }
 
 type client struct {
@@ -44,6 +46,18 @@ func (c *client) clientLoop() {
 		}
 		c.respChan <- resp
 	}
+}
+
+func (c *client) ListRegex(pattern string) ([]Registration, error) {
+	resp, err := c.call(Request{List: &pattern})
+	if err != nil {
+		return nil, err
+	}
+	return *resp.List, nil
+}
+
+func (c *client) List() ([]Registration, error) {
+	return c.ListRegex(".*")
 }
 
 func (c *client) Register(name string, addr string) (bool, error) {

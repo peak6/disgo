@@ -80,7 +80,9 @@ func join(node Node) {
 	}
 	newHandler(conn)
 }
-
+type Opt struct {
+	Foo string[string] `short:"a"`
+}
 func init() {
 	nodes = make(map[Node]*nodeConn)
 	MyHost, initError = os.Hostname()
@@ -134,6 +136,7 @@ func newHandler(conn net.Conn, initiator bool) error {
 		if err != nil {
 			return err
 		}
+
 	}
 	nc.send(nodeList())
 
